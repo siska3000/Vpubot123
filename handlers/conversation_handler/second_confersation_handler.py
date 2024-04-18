@@ -1,12 +1,13 @@
 from typing import Any
 
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 
-from telegram.ext import ConversationHandler, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import ConversationHandler, CommandHandler, ContextTypes, MessageHandler, filters, \
+    CallbackQueryHandler
 
 from handlers.base_handler import BaseHandler
 
-FOREST, BUNKER, OLD_HOUSE, FREEDOM = range(4)
+FOREST, BUNKER, OLD_HOUSE, FREEDOM, STORY, HOME = range(6)
 
 
 class SecondConversationHandler(BaseHandler):
@@ -19,6 +20,8 @@ class SecondConversationHandler(BaseHandler):
                 BUNKER: [MessageHandler(filters.Regex('^(Ні|Так)$'), cls.bunker)],
                 OLD_HOUSE: [MessageHandler(filters.Regex('^(Лишитися|Вийти)$'), cls.old_house)],
                 FREEDOM: [MessageHandler(filters.Regex('^(Ні|Так)$'), cls.freedom)],
+                STORY: [MessageHandler(filters.Regex('^(Ні|Так)$'), cls.story)],
+                HOME: [CallbackQueryHandler(cls.home)]
             },
             fallbacks=[CommandHandler('exit', cls.exit)]
         )
@@ -110,14 +113,62 @@ class SecondConversationHandler(BaseHandler):
     async def freedom(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answer = update.message.text
         if answer == 'Ні':
+            keyboard = [
+                [KeyboardButton('Ні'), KeyboardButton('Так')],
+            ]
+
+            reply_text = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
             await update.message.reply_text(
                 f"""
             Вам передчуття підказує що краще не заходити туди, і ви пішли на обхід дому, неймовірно але ви бачите дорогу!
             Ви виходите на дорогу а медвідь вас так і не догнав, ви ловите першу машину, водій якої виявився вашим братом який вас шукав,
-            Він пояснює всю ситуація і відвозить вас додому, КІНЕЦЬ! 
-            """)
-            return ConversationHandler.END
-        elif answer == 'Так':
+            Він пояснює всю ситуацію і відвозить вас додому, і пропонує вам розказати вам що з вами сталося
+            """, reply_markup=reply_text)
+            return STORY
+        elif answer == 'Та':
             await update.message.reply_text(
                 f'Це виявився дім маніяка, ви застали його за розпиленням трупа... на цьому моменті ваша доля вирішена.')
             return ConversationHandler.END
+
+
+    @staticmethod
+    async def story(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        answer = update.message.text
+        if answer == 'Так':
+            keyboard = [
+                [InlineKeyboardButton('Так', callback_data='Так')],
+                [InlineKeyboardButton('Ні', callback_data='Ні')]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text(
+                f"""
+                Річ у тім що ви ту ніч пішли пити алкоголь бо вас кинула дівчина, але раптом ви пропали, і вас не було 4 дні.
+                вас шукали по всьому місту, і вас вважали мертвим.
+                Прослухавши цю історію ви була вражені, проте щось ви почали відчувати що щось не так, і ви починаєте не довіряєте брату
+                чи попробуєте ви втекти?
+            """, reply_markup=reply_markup)
+            return HOME
+        elif answer == 'Ні':
+            await update.message.reply_text(
+                f'Брат розізлився і викинув вас з машини')
+            return ConversationHandler.END
+
+    @staticmethod
+    async def home(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+        if data == 'Так':
+            await query.edit_message_text("""
+                Ви втекли з машини і ви взнали що ваш брат зрадник і він думав що ви в лісі помрете, і коли взнав що ви вижили
+                хотів вас власноруч добити проте він попав в аварію під час спроби догнати вас і ви спокійно добралися додому,
+                ХОРОШИЙ КІНЕЦЬ
+            """)
+            return ConversationHandler.END
+        elif data == 'Ні':
+            await query.edit_message_text("Ваш брат виявився зрадником і зарізав вас, дуже сумно але правда...")
+            return ConversationHandler.END
+
+
